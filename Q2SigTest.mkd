@@ -1,0 +1,57 @@
+source activate qiime2-2018.2
+
+Convert texxt table to biom format:
+
+`biom convert -i feature-table-2.txt -o feature-table-2.biom --table-type="OTU table" --to-hdf5`
+
+Convert the biom file to a qiime2 feature table (.qza):
+
+    qiime tools import \
+    --input-path feature-table-2.biom \
+    --type 'FeatureTable[Frequency]' \
+    --source-format BIOMV210Format \
+    --output-path feature-table-2.qza
+
+Convert the .qza file to a .qzv file that can be visually checked with View.Qiime2.org:
+
+    qiime feature-table summarize \
+    --i-table feature-table-2.qza \
+    --o-visualization feature-table-2.qzv \
+    --m-sample-metadata-file metatable.tsv
+
+Compute distances matrices from the feature table:
+
+    qiime diversity core-metrics \
+    --i-table feature-table-2.qza \
+    --output-dir core-metrics-phylogenetic \
+    --m-metadata-file metatable.tsv  \
+    --p-sampling-depth 98
+
+Perform PERMANOVA test on the Bray-Curtis distance matrix with pairwise comparisons.
+
+By Host SV:    
+
+    qiime diversity beta-group-significance \
+    --i-distance-matrix core-metrics/bray_curtis_distance_matrix.qza \
+    --m-metadata-file metatable.tsv \
+    --m-metadata-column HostSV \
+    --o-visualization core-metrics-phylogenetic/host_bray_curtis_distance_significance.qzv \
+    --p-pairwise
+
+
+By Location:
+
+(must first remove samples from locations with only one replicate (st.4 and 10))
+
+    qiime diversity filter-distance-matrix \
+    --i-distance-matrix core-metrics/bray_curtis_distance_matrix.qza \
+    --m-metadata-file metatable.tsv \
+    --p-where "NOT Location='st4' AND NOT Location='st10' " \
+    --o-filtered-distance-matrix core-metrics-phylogenetic/no4or10_bray_curtis_distance_matrix.qza
+
+    qiime diversity beta-group-significance \
+    --i-distance-matrix core-metrics/no4or10_bray_curtis_distance_matrix.qza \
+    --m-metadata-file metatable.tsv \
+    --m-metadata-column Location \
+    --o-visualization core-metrics-phylogenetic/loc_bray_curtis_distance_significance.qzv \
+    --p-pairwise
