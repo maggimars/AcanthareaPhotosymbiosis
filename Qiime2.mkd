@@ -1,0 +1,153 @@
+## Activate Qiime2 Environment
+`source activate qiime2-2017.11`
+
+## import the data ...
+
+  `Msamps=/Users/brisbin/desktop/2017SpringDeepSeaCruise/MiraiMiSeq/seqs/ENAseqs`
+
+    qiime tools import \
+    --type 'SampleData[PairedEndSequencesWithQuality]' \
+    --input-path $Msamps \
+    --source-format CasavaOneEightSingleLanePerSampleDirFmt \
+    --output-path demux-paired-end.qza
+
+**prepare the data for visualization**
+
+    qiime demux summarize \
+    --i-data demux-paired-end.qza \
+    --o-visualization demux.qzv
+
+* Drag `demux.qzv` to into a browser window opened to https://view.qiime2.org/
+* The `Overview` tab (top left) displays the total number of reads per sample
+* The `Interactive Quality Plot` tab displays the per base quality score distribution. This information is used to determine the read lengths used in further analysis. In this analysis, the forward reads were trimmed at 240 bp and the reverse reads were trimmed at 200 bp. Both the forward and reverse reads were trimmed 10bp from the left.
+
+## denoise with DaDa2
+
+    qiime dada2 denoise-paired \
+    --i-demultiplexed-seqs demux-paired-end.qza \
+    --output-dir ./dada2 \
+    --o-representative-sequences rep-seqs \
+    --p-trim-left-f 10 \
+    --p-trim-left-r 10 \
+    --p-trunc-len-f 240 \
+    --p-trunc-len-r 200 \
+    --p-n-threads 3
+
+**visualize results**
+
+    qiime feature-table summarize \
+    --i-table ./dada2/table.qza \
+    --o-visualization ./dada2/table.qzv \
+    --m-sample-metadata-file sampleMap.txt
+
+* Drag `/dada2/table.qzv` into a browser window opened to https://view.qiime2.org/
+* The `Overview` tab (top left) displays the total number of features and summary statistics for feature frequencies. The `Interactive Sample Detail` tab displays the number of features per sample. The `Feature Detail` tab displays the frequency for each feature.
+
+## Add Taxonomy to features
+
+**import SILVA 128 references**
+
+SILVA 128 files are located:
+  `/Users/brisbin/Documents/TonanMaruSequencing/SILVA_128_QIIME_release`
+  Rep_set:
+  `SILVA97otus=/Users/brisbin/Documents/TonanMaruSequencing/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta`
+  Taxonomy:
+  `Tax97=/Users/brisbin/Documents/TonanMaruSequencing/SILVA_128_QIIME_release/taxonomy/18S_only/97/consensus_taxonomy_all_levels.txt`
+
+Import SILVA otus to qiime:
+
+        qiime tools import \
+        --type 'FeatureData[Sequence]' \
+        --input-path $SILVA97otus \
+        --output-path 97_otus.qza
+
+Import SILVA taxonomy to qiime:
+
+        qiime tools import \
+        --type 'FeatureData[Taxonomy]' \
+        --source-format HeaderlessTSVTaxonomyFormat \
+        --input-path $Tax97 \
+        --output-path ref-taxonomy.qza  
+
+**train the classifier**
+
+`refseqs=/Users/brisbin/desktop/2017SpringDeepSeaCruise/MiraiMiSeq/Qiime2forGit/97_otus.qza`
+`reftax=/Users/brisbin/desktop/2017SpringDeepSeaCruise/MiraiMiSeq/Qiime2forGit/ref-taxonomy.qza`
+
+    qiime feature-classifier fit-classifier-naive-bayes \
+    --i-reference-reads $refseqs \
+    --i-reference-taxonomy $reftax \
+    --o-classifier classifier.qza       
+
+**assign taxonomy to features**
+
+    qiime feature-classifier classify-sklearn \
+    --i-classifier ./classifier.qza \
+    --i-reads rep-seqs.qza \
+    --o-classification taxonomy.qza
+
+    qiime feature-table tabulate-seqs \
+    --i-data rep-seqs.qza \
+    --o-visualization rep-seqs.qzv
+
+* Drag `rep-seqs.qzv` to into a browser window opened to https://view.qiime2.org/
+* This file displays the unique identifier for each representative feature and the sequence for the features
+* download the Fasta file for the representative sequences by clicking the link at the top of the page. The file is downloaded as `sequences.fasta`
+* This file will be used to acquire the sequences for host and symbiont SVs in order to build phylogenetic trees
+
+    qiime metadata tabulate \
+    --m-input-file taxonomy.qza \
+    --o-visualization taxonomy.qzv
+
+* Drag `taxonomy.qzv` to into a browser window opened to https://view.qiime2.org/
+* This file displays the assigned taxonomy for the unique identifier assigned to each representative sequences
+* Click the tab `CSV` under export options to download this data. The file is saved as `metadata.csv`, change the file to something more descriptive, `taxonomy.csv`
+* This file will be imported into R, used to filter feature tables, and will be added to `phyloseq` objects
+
+## Export Data for R and phyloseq
+
+**Split feature table by sample type**
+
+    qiime feature-table filter-samples \
+    --i-table ./dada2/table.qza \
+    --m-metadata-file sampleMap.txt \
+    --p-where "Organism='Community'" \
+    --o-filtered-table ./dada2/environment-table.qza
+
+    qiime feature-table filter-samples \
+    --i-table ./dada2/table.qza \
+    --m-metadata-file sampleMap.txt \
+    --p-where "Organism='Acantharea'" \
+    --o-filtered-table ./dada2/host-table.qza
+
+**extract feature table**
+
+`mkdir environment-extracted-feature-table`   
+`mkdir host-extracted-feature-table`
+
+    qiime tools extract \
+    dada2/environment-table.qza \
+    --output-dir environment-extracted-feature-table
+
+    qiime tools extract \
+    dada2/host-table.qza \
+    --output-dir host-extracted-feature-table
+
+**convert `.biom` file to `.txt`**
+
+    biom convert -i environment-extracted-feature-table/f250d70a-9b42-4ffc-8aad-95d090e64ba8/data/feature-table.biom -o environment-table.txt --to-tsv
+
+    biom convert -i host-extracted-feature-table/84cec4b4-2d5f-4976-93d3-225542b3162d/data/feature-table.biom -o host-table.txt --to-tsv
+
+**extract phylogenetic tree**
+
+    qiime tools export \
+    ./rooted-tree.qza \
+    --output-dir ./
+
+outPut = `tree.nwk`
+
+**rename samples from well#s to meaningful sample names**
+Use `SampleMap.txt` to rename samples
+`host-table.txt` --> `singles-feature-table-renamed.txt`
+`environment-table.txt`--> `feature-table-filters.txt`
