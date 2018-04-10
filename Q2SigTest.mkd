@@ -1,4 +1,4 @@
-source activate qiime2-2018.2
+`source activate qiime2-2018.2`
 
 Convert text table to biom format:
 
