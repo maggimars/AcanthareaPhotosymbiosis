@@ -1,6 +1,6 @@
 source activate qiime2-2018.2
 
-Convert texxt table to biom format:
+Convert text table to biom format:
 
 `biom convert -i feature-table-2.txt -o feature-table-2.biom --table-type="OTU table" --to-hdf5`
 
