@@ -85,7 +85,7 @@ ps<- phyloseq(OTU, TAX, META, tree)
 
 ## Preprocessing 
 
-### Prevavence Filtering
+### Prevalence Filtering
 ```{r}
 prevdf = apply(X = otu_table(ps),
                MARGIN = ifelse(taxa_are_rows(ps), yes = 1, no = 2),
