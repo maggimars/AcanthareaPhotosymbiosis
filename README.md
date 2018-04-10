@@ -1,12 +1,10 @@
 # AcanthareaPhotosymbiosis
 
 This repository contains the intermediate data files created during analysis performed for: 
-<p align="center">
-  
+<div style="text-align:center">         
 **Intra-host symbiont diversity and extended symbiont maintenance in photosymbiotic Acantharea (clade F)**
 *Margaret Mars Brisbin, Lisa Y. Mesrop, Mary M. Grossmann, Satoshi Mitarai*
-
-</p>
+</div>
 The raw sequence data is available from the European Nucleotide Archive (ENA) under study accession number: PRJEB24538.
 
 The data analysis occurs in three steps, with Qiime2, then R, then Qiime2 again, and follows the following sequence: 
