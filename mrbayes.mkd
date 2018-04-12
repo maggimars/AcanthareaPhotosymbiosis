@@ -10,4 +10,3 @@
     sump
     sumt
 
-    Average standard deviation of split frequencies: 0.015473
