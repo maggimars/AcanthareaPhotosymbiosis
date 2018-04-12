@@ -1,0 +1,13 @@
+# MrBayes 
+
+    mb
+
+    execute finalSYMfasta_PavlovaOUT.nex
+    outgroup Pavlova
+
+    lset nst=6 rates=invgamma
+    mcmc ngen=100000 samplefreq=100 printfreq=1000 diagnfreq=1000
+    sump
+    sumt
+
+    Average standard deviation of split frequencies: 0.015473
