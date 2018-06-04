@@ -95,9 +95,9 @@ Import SILVA taxonomy to qiime:
 * download the Fasta file for the representative sequences by clicking the link at the top of the page. The file is downloaded as `sequences.fasta`
 * This file will be used to acquire the sequences for host and symbiont SVs in order to build phylogenetic trees
 
-    qiime metadata tabulate \
-    --m-input-file taxonomy.qza \
-    --o-visualization taxonomy.qzv
+      qiime metadata tabulate \
+      --m-input-file taxonomy.qza \
+      --o-visualization taxonomy.qzv
 
 * Drag `taxonomy.qzv` to into a browser window opened to https://view.qiime2.org/
 * This file displays the assigned taxonomy for the unique identifier assigned to each representative sequences
