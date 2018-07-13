@@ -1,0 +1,551 @@
+---
+title: "Community Composition Analysis"
+author: "Maggi Brisbin"
+date: "April 5, 2018"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE, fig.path='figures/', fig.width=8, fig.height=5 )
+```
+
+Load Packages 
+```{r loadLibraries, message=FALSE}
+library("phyloseq")
+library("ggplot2")
+library(plyr)
+library("dplyr")
+library("tidyr")
+library("RColorBrewer", lib.loc="/Library/Frameworks/R.framework/Versions/3.4/Resources/library")
+library(gridExtra)
+library(reshape2)
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+library("vegan")
+```
+# Initial Relative Abundance BarPlot
+load data (exported from qiime2 `taxa-bar-plots.qzv`)
+```{r}
+seqper<- read.csv("level-3.csv")
+```
+Filter to only contain Acanatharea samples and then remove taxa that were only present in the environmental samples.
+```{r}
+seqper <- seqper[seqper$Organism == "Acantharea",]
+row.names(seqper) <- seqper$meta
+seqperRA <-seqper[,-c(1,30:35)] 
+seqperRA <-  seqperRA[,colSums(seqperRA) > 0]
+```
+Transform data to relative abundance for plotting.
+```{r}
+tseqperRA <- data.frame(t(seqperRA))
+sumcols<- colSums(tseqperRA)
+for(i in 1:ncol(tseqperRA)) {
+  tseqperRA[[i]]<- (tseqperRA[[i]]/sumcols[[i]])*100
+}
+tseqperRA<-round(tseqperRA, digits = 2)
+#write.csv(tseqperRA, file="initrelabund.csv", quote = FALSE, row.names= TRUE )
+```
+prepare data for plotting
+```{r}
+tseqperRA$row <-row.names(tseqperRA)
+mSingles<- melt(tseqperRA, id.vars="row")
+```
+
+plot:
+```{r}
+S2 <- brewer.pal(8, "Set2")
+colors1 <- c("#50a33e", "#7eb38e", "#b1f41b", "#0e8121", "#5edbff", "#0097c3", "#0a3863", "#56B4E9", "#b2f5ff", "#0e5c63", "#1b8085", "#3aa6a9", "#ffb3b3", "#ff7b7b")
+colors<- c( S2, colors1)
+
+# put samples in more logical order on x axis and change label names
+xorder = c("st2.A.1","st2.A.3","st2.A.5","st2.A.6","st2.A.7","st4.A.9","st10.A.10","st12.A.11","st12.A.12","st12.A.14","st12.A.15","st12.A.16","st13.A.18","st13.A.19","st13.A.20","st13.A.21","st17.A.22","st17.A.25","st17.A.27","st17.A.28", "st17.A.29","st17.A.31","st17.A.33","st17.A.34","st17.A.35","st17.A.36","st17.A.39","st17.A.40","st17.A.42","st17.A.43", "Onna.April.A3", "Onna.April.A4","Onna.May.A1","Onna.May.A3","Onna.May.A6","Onna.May.A7","Onna.May.A10","Onna.May.A11","Onna.May.A12", "Catalina.A.Ae","Catalina.A.C1","Catalina.A.C2" )
+xnames = c("st2.1","st2.3","st2.5","st2.6","st2.7","st4.9","st10.10","st12.11","st12.12","st12.14","st12.15","st12.16","st13.18","st13.19","st13.20","st13.21","st17.22","st17.25","st17.27","st17.28", "st17.29","st17.31","st17.33","st17.34","st17.35","st17.36","st17.39","st17.40","st17.42","st17.43", "Oki.3A", "Oki.4A","Oki.1","Oki.3","Oki.6","Oki.7","Oki.10","Oki.11","Oki.12", "Cat.Ae","Cat.C1","Cat.C2")
+
+relabund<- ggplot(mSingles, aes(x=variable, y=value, fill=row)) + 
+  geom_bar(stat="identity") +
+  xlab("") +
+  ylab("") +
+  theme_bw()+
+  scale_x_discrete(limits = xorder, labels = xnames)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  theme(legend.title=element_blank()) +
+  theme(legend.position="bottom") +
+  guides(fill=guide_legend(ncol=2))+
+  scale_y_continuous(expand = c(0, 0)) + scale_fill_manual(values=colors)
+relabund + theme(legend.position="none") + 
+  theme(text=element_text(size=16,  family="serif"))
+```
+```{r, echo = FALSE}
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  legend
+}
+legend <- g_legend(relabund)
+SVlegend <- grid.arrange(legend)
+```
+
+# Intra-host Symbiont Diversity
+
+## Load Data for Phyloseq
+
+Load data and prepare dataframes to be imported as phyloseq objects.
+
+*SV Feature Table*
+
+```{R}
+singles <- read.delim("singles-feature-table-renamed.txt")
+
+row.names(singles)<-singles[[1]]
+singles<-singles[,-(1)]
+singles<- singles[ , order(names(singles))]
+
+#convert feature table to OTU phyloseq object 
+fmat <- as.matrix(singles)
+OTU = otu_table(fmat, taxa_are_rows = TRUE)
+```
+
+*Taxonomy Table*
+
+```{r}
+taxonomy <- read.csv("taxonomy.csv", stringsAsFactors = FALSE)
+names(taxonomy) <- c("row", "tax", "Confidence")
+row.names(taxonomy) <-taxonomy[[1]]
+taxonomy <- taxonomy[,(-1)]
+
+taxonomy <-  separate(taxonomy, tax, c("D0","D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "D14"), sep = ";", fill = "right")
+taxonomy <- taxonomy[,c(1:5)]
+taxmat <- as.matrix(taxonomy)
+TAX = tax_table(taxmat)
+```
+
+*Sample Information*
+```{r}
+metatable <- read.csv("sampledata.csv")
+row.names(metatable) <- metatable[[1]]
+metatable$HostSV <- as.character(metatable$HostSV)
+metatable<- metatable[,(-1)]
+
+META<- sample_data(metatable)
+```
+
+*Phylogenetic Tree*
+```{r}
+tree<- read_tree("tree.nwk")
+```
+
+Make Phyloseq Object
+```{r}
+ps<- phyloseq(OTU, TAX, META, tree)
+```
+
+## Preprocessing 
+
+### Prevavence Filtering
+```{r}
+prevdf = apply(X = otu_table(ps),
+               MARGIN = ifelse(taxa_are_rows(ps), yes = 1, no = 2),
+               FUN = function(x){sum(x > 0)})
+
+prevdf = data.frame(Prevalence = prevdf,
+                    TotalAbundance = taxa_sums(ps),
+                    tax_table(ps))
+
+plyr::ddply(prevdf, "D2", function(df1){cbind(mean(df1$Prevalence),sum(df1$Prevalence))})
+
+prevplot1<-ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps),color=D2)) +
+  geom_hline(yintercept = 0.05, alpha = 0.5, linetype = 2) +  geom_point(size = 2, alpha = 0.7) + 
+  theme_bw()+
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~D2) + theme(legend.position="none")
+```
+
+**Initial Prevalence Plot**
+
+```{r prevplot1, echo=FALSE}
+prevplot1
+```
+
+*Filter at 5% prevalence (SVs below the dashed lines in the plots will be discarded) )*
+
+```{r}
+prevalenceThreshold = 0.05 * nsamples(ps)
+
+keepTaxa = rownames(prevdf)[(prevdf$Prevalence >= prevalenceThreshold)]
+ps2 = prune_taxa(keepTaxa, ps)
+
+table(tax_table(ps2)[, "D2"], exclude = NULL)
+```
+
+Check out the NA samples
+```{r}
+D2s <- c("D_2__Ancyromonadida", "D_2__Apusomonadidae", "D_2__Chloroplastida", 
+         "D_2__Holozoa", "D_2__Prymnesiophyceae", "D_2__Rhizaria", "D_2__Stramenopiles")
+physeqNA <- subset_taxa(ps2, !(D2 %in% D2s))
+physeqNA
+```
+```{r}
+naOTU <- data.frame(otu_table(physeqNA))
+```
+blasting the 5 NA sequences revealed that they are most likely host-derived. The top hits for each were Acantharea. 
+
+### Taxonomic Filtering
+
+Remove Host SVs (SAR) and remaining prey (Opisthokonta) by filtering to keep only Haptophyte SVs. 
+
+```{r}
+physeqP <- subset_taxa(ps2, D1=="D_1__Haptophyta")
+physeqP
+```
+
+*21 symbiotic SVs remain*
+
+### Transformation
+Transform count data to relative abundance (as %) to normalize for differences in library size.
+
+```{r}
+physeqPra<- transform_sample_counts(physeqP, function(OTU) 100* OTU/sum(OTU))
+```
+
+## Distance and Ordination 
+
+Determine the Bray-Curtis distances between samples and perform Principal Coordinate Analysis (PCoA). Plot the PCoA. 
+```{r}
+ordu = ordinate(physeqPra, "PCoA", "bray")
+p<-plot_ordination(physeqPra, ordu, color="Location", shape = "HostSV")+theme_bw() +scale_color_manual(values=cbPalette)+ geom_point(size=3)+
+  theme(text=element_text(size=16,  family="serif"))
+```
+
+```{r, echo=FALSE}
+p
+```
+
+
+## Significance Testing
+
+PERMANOVA with Vegan function `adonis` by collection location: 
+
+```{r}
+set.seed(1)
+OTUs <- t(data.frame(otu_table(physeqPra))) #get data frame of symbiont SVs from phyloseq object object
+meta <- metatable[metatable$Source=="host",] # filter sample data to include ONLY the samples included in this analysis. Otherwise, adonis will give an error. 
+
+adonis(vegdist(OTUs, method = "bray") ~ Location, data = meta)
+```
+
+and by Host SV type: 
+
+``` {r}
+set.seed(1)
+adonis(vegdist(OTUs, method = "bray") ~ HostSV, data = meta)
+```
+
+Export filtered SV table to perforem pairwise comparisons in Q2. 
+```{r}
+OTUs4Q2 <- data.frame(otu_table(physeqPra))
+OTUs4Q2 <- cbind(rownames(OTUs4Q2), data.frame(OTUs4Q2, row.names=NULL))
+colnames(OTUs4Q2)[1] <- "OTU ID"
+write.table(OTUs4Q2, file='feature-table-2.txt', quote=FALSE, sep='\t', row.names = FALSE)
+```
+Export sample data for Q2 because sample "-" in sample names have changed to "."
+``` {r}
+meta4Q2 <- cbind(rownames(meta), data.frame(meta, row.names=NULL))
+colnames(meta4Q2)[1] <- "SampleID"
+write.table(meta4Q2, file='metatable.tsv', quote=FALSE, sep='\t', row.names = FALSE) 
+```
+
+## Relative Abundance Plot
+```{r}
+symbioOTUs <- data.frame(otu_table(physeqPra)) #get data frame of symbiotic OTUs from phyloseq object
+symbioOTUs$row <- row.names(symbioOTUs)
+
+#make data frame of Symbiont OTUs with original counts
+singles <- read.delim("singles-feature-table-renamed.txt")
+singlesyms <- data.frame(symbioOTUs[,43])
+names(singlesyms) <- c("row")
+syms <- merge(singlesyms, singles, by="row")
+
+#make dataframe for merging with environmental samples dataframe later
+syms4filters <-syms
+row.names(syms4filters) <-syms4filters$row
+syms4filters<-syms4filters[,(-1)]
+syms4filters<- syms4filters[ , order(names(syms4filters))]
+MiraiAs <- syms4filters[,13:42]
+MiraiAs$row <- rownames(MiraiAs)
+
+#convert to relative abundance
+row.names(syms) <-syms$row
+singlesRA <- syms[,(-1)]
+sumcols <- colSums(singlesRA)
+for(i in 1:ncol(singlesRA)) {
+  singlesRA[[i]]<- (singlesRA[[i]]/sumcols[[i]])*100
+}
+syms<- singlesRA
+
+#assign SVs ids based on their location on the phylogenetic tree. This will ensure that the SVs appear in the same order in the stacked bar plots as they do in the phylogenetic tree and will make it easier to look back and forth between the two plots
+id <- c("S", "J", "K", "O", "N", "F", "M", "P", "R","A","D","B","H","E","I","G","T","C","U","L","Q")
+syms$id2 <- id 
+
+#melt data frame for plotting
+msyms<- melt(syms, id.vars="id2")
+
+# put samples in more logical order on x axis and change label names
+xorder = c("st2.A.1","st2.A.3","st2.A.5","st2.A.6","st2.A.7","st4.A.9","st10.A.10","st12.A.11","st12.A.12","st12.A.14","st12.A.15","st12.A.16","st13.A.18","st13.A.19","st13.A.20","st13.A.21","st17.A.22","st17.A.25","st17.A.27","st17.A.28", "st17.A.29","st17.A.31","st17.A.33","st17.A.34","st17.A.35","st17.A.36","st17.A.39","st17.A.40","st17.A.42","st17.A.43", "Onna.April.A3", "Onna.April.A4","Onna.May.A1","Onna.May.A3","Onna.May.A6","Onna.May.A7","Onna.May.A10","Onna.May.A11","Onna.May.A12", "Catalina.A.Ae","Catalina.A.C1","Catalina.A.C2" )
+xnames = c("st2.1","st2.3","st2.5","st2.6","st2.7","st4.9","st10.10","st12.11","st12.12","st12.14","st12.15","st12.16","st13.18","st13.19","st13.20","st13.21","st17.22","st17.25","st17.27","st17.28", "st17.29","st17.31","st17.33","st17.34","st17.35","st17.36","st17.39","st17.40","st17.42","st17.43", "Oki.3A", "Oki.4A","Oki.1","Oki.3","Oki.6","Oki.7","Oki.10","Oki.11","Oki.12", "Cat.Ae","Cat.C1","Cat.C2")
+barorder = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21")
+#custom color scheme
+colors <- c("#cd4a4a", "#9f1c3b", "#790a1a", "#878787", "#5e5e5e", "#292929", "#95cde8", "#4897d8", "#217ca3", "#bbfaff", "#3aa6a9", "#1b8085","#fff671", "#ffd662", "#f5dfb8", "#f5ba98", "#f77d75", "#bedb92", "#77c063", "#569358", "#065900") 
+
+#plot relative abundances of symbiotic SVs in acantharian hosts
+HostSymRA<- ggplot(msyms, aes(x=variable, y=value, fill=id2)) + 
+  geom_bar(stat="identity") +
+  xlab("") +
+  ylab("") +
+  theme_bw()+
+  scale_x_discrete(limits = xorder, labels = xnames)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  theme(legend.title=element_blank()) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_manual(values=colors,  labels = barorder)
+```
+
+**Figure 2**
+
+```{r, echo=FALSE}
+HostSymRA + theme(legend.position="none") + 
+  theme(text=element_text(size=16,  family="serif"))
+```
+
+
+**Legend for Figures 2 and 3**
+
+```{r}
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  legend
+}
+legend <- g_legend(HostSymRA)
+SVlegend <- grid.arrange(legend)
+```
+
+## Number of SVs per Host
+```{r}
+#count number rof non-zero rows for each column to get number of symbiotic SVs per host
+nonzero <- function(x) sum(x != 0)
+Svscnt<-as.data.frame(numcolwise(nonzero)(syms))
+avg = as.integer(apply(Svscnt,1,mean,na.rm=TRUE)) +1
+sd = as.integer(apply(Svscnt,1,sd,na.rm=TRUE)) 
+min= apply(Svscnt,1,min,na.rm=TRUE) 
+max= apply(Svscnt,1,max,na.rm=TRUE)
+```
+```{r, echo=FALSE}
+paste("The mean number of SVs per host is ", avg, "+/-", sd, "(standard deviation).")
+paste("There are",min, "to", max, "SVs per host.")
+```
+
+# Environmental Symbiont Diversity
+
+## Load Data 
+Load data and prepare dataframes to be imported as phyloseq objects.
+```{r}
+filters <- read.delim("feature-table-filters.txt")
+#filter feature table to include only the 0.2 um filters
+names.use <- c("OTU","st2.DNA.0.2.1","st2.DNA.0.2.2","st4.DNA.0.2.1","st4.DNA.0.2.2","st10.DNA.0.2.1","st10.DNA.0.2.2","st12.DNA.0.2.1","st12.DNA.0.2.2","st13.DNA.0.2.1","st13.DNA.0.2.2","st17.DNA.0.2.1","st17.DNA.0.2.2" )
+filters <- filters[,names.use]
+```
+
+## Preprocessing
+
+### Filter Symbiotic SVs
+
+Filter dataframe to contain the symbiotic SVs from acantharian hosts.
+```{r}
+row.names(filters) <- filters$OTU
+filters<- filters[,-(1)]
+filters$row <- row.names(filters)
+new<- merge(MiraiAs, filters, by = "row") #MiraiAs is dataframe of counts of symbiont SVs in the acantharians collected on Mirai
+```
+
+Convert filtered feature table to OTU phyloseq object. 
+```{r}
+row.names(new)<-new$row
+new <- new[,-1]
+fmat <- as.matrix(new)
+OTU = otu_table(fmat, taxa_are_rows = TRUE)
+physeq<- phyloseq(OTU, TAX, META, tree) #The taxonomy, metadata, and phylogenetic tree are the same as for the acantharian samples
+```
+
+### Transformation
+Transform count data to relative abundance (as %) to normalize for differences in library size.
+
+```{r}
+physeqPra<- transform_sample_counts(physeq, function(OTU) OTU/sum(OTU))
+```
+
+## Distance and Ordination 
+
+Determine the Bray-Curtis distances between samples and perform Principal Coordinate Analysis (PCoA). Plot the PCoA. 
+
+```{r}
+ordu = ordinate(physeqPra, "PCoA", "bray")
+colors <- c("black", "#0F52BA")
+p1<-plot_ordination(physeqPra, ordu, color="Source", shape = "Location") + geom_point(size=3.5)+theme_bw() +scale_color_manual(values=colors) + 
+  theme(text=element_text(size=16,  family="serif"))
+```
+
+```{r, echo=FALSE}
+p1
+```
+
+
+## Significance Testing
+
+PERMANOVA with Vegan function `adonis` by sample source (Environment or Host):
+```{r}
+OTUs <- t(data.frame(otu_table(physeqPra))) #get data frame of OTUs from phyloseq object
+mirai<- c("st2", "st4", "st10", "st12", "st13", "st17")
+meta <- metatable[metatable$Location %in% mirai,] #make sure metadata only has the samples included in the feature table
+metaA <- meta[meta$Source == "host",]
+metaF <- meta[meta$Source == "environment",]
+names.use <- c("st2.DNA.0.2.1","st2.DNA.0.2.2","st4.DNA.0.2.1","st4.DNA.0.2.2","st10.DNA.0.2.1","st10.DNA.0.2.2","st12.DNA.0.2.1","st12.DNA.0.2.2","st13.DNA.0.2.1","st13.DNA.0.2.2","st17.DNA.0.2.1","st17.DNA.0.2.2" )
+metaF<- metaF[names.use,]
+meta <- rbind(metaA, metaF)
+
+set.seed(1)
+
+adonis(vegdist(OTUs, method = "bray") ~ Source, data = meta)
+```
+
+## Relative Abundance Plot
+```{r}
+keep<-MiraiAs
+keep$id2<-id
+keep <- data.frame(keep[,c(31,32)])
+
+envRA <-merge(filters, keep, by = "row")
+row.names(envRA) <- envRA$id2
+envRA <- envRA[,-c(1,14)]
+
+sumcols <- colSums(envRA)
+for(i in 1:ncol(envRA)) {
+  envRA[[i]]<- (envRA[[i]]/sumcols[[i]])*100
+}
+
+envRA$id2 <- row.names(envRA)
+menvRA<- melt(envRA, id.vars="id2")
+
+# put samples in more logical order on x axis and change label names
+filterxorder = c("st2.DNA.0.2.1","st2.DNA.0.2.2","st4.DNA.0.2.1","st4.DNA.0.2.2","st10.DNA.0.2.1","st10.DNA.0.2.2","st12.DNA.0.2.1","st12.DNA.0.2.2","st13.DNA.0.2.1","st13.DNA.0.2.2","st17.DNA.0.2.1","st17.DNA.0.2.2" )
+filterxnames = c("st2.1","st2.2","st4.1","st4.2","st10.1","st10.2","st12.1","st12.2","st13.1","st13.2","st17.1","st17.2" )
+colors <- c("#cd4a4a", "#9f1c3b", "#790a1a", "#878787", "#5e5e5e", "#292929", "#95cde8", "#4897d8", "#217ca3", "#bbfaff", "#3aa6a9", "#1b8085","#fff671", "#ffd662", "#f5dfb8", "#f5ba98", "#f77d75", "#bedb92", "#77c063", "#569358", "#065900") 
+
+envSymRA<- ggplot(menvRA, aes(x=variable, y=value, fill=id2)) + 
+  geom_bar(stat="identity") +
+  xlab("") +
+  ylab("") +
+  scale_x_discrete(limits = filterxorder, labels = filterxnames)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  scale_fill_manual(values=colors)+
+  theme(legend.title=element_blank()) +
+  scale_y_continuous(expand = c(0, 0)) + theme(legend.position="none")
+```
+
+**Figure 3**
+
+```{r, echo=FALSE}
+envSymRA + 
+  theme(text=element_text(size=16,  family="serif"))
+```
+
+# Complete Environmental Community
+
+How good are the replicates when condsidering the entire environmental microbial eukaryote community? 
+
+## Load Data
+```{r}
+filters <- read.delim("feature-table-filters.txt")
+#filter feature table to include only the 0.2 um filters
+names.use <- c("OTU","st2.DNA.0.2.1","st2.DNA.0.2.2","st4.DNA.0.2.1","st4.DNA.0.2.2","st10.DNA.0.2.1","st10.DNA.0.2.2","st12.DNA.0.2.1","st12.DNA.0.2.2","st13.DNA.0.2.1","st13.DNA.0.2.2","st17.DNA.0.2.1","st17.DNA.0.2.2" )
+filters <- filters[,names.use]
+#convert feature table to OTU phyloseq object 
+row.names(filters)<- filters[[1]]
+filters<-filters[,-(1)]
+fmat <- as.matrix(filters)
+```
+Convert to phyloseq object
+```{r}
+OTU = otu_table(fmat, taxa_are_rows = TRUE)
+ps<- phyloseq(OTU, TAX, META, tree)
+```
+
+## Preprocessing 
+###Prevalence Filtering
+```{r}
+prevdf = apply(X = otu_table(ps),
+               MARGIN = ifelse(taxa_are_rows(ps), yes = 1, no = 2),
+               FUN = function(x){sum(x > 0)})
+
+prevdf = data.frame(Prevalence = prevdf,
+                    TotalAbundance = taxa_sums(ps),
+                    tax_table(ps))
+
+plyr::ddply(prevdf, "D2", function(df1){cbind(mean(df1$Prevalence),sum(df1$Prevalence))})
+
+envPrevplot<- ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps),color=D1)) + geom_hline(yintercept = 0.05, alpha = 0.5, linetype = 2) +  geom_point(size = 2, alpha = 0.7) +theme_bw()+
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~D1) + theme(legend.position="none")
+```
+
+```{r, echo=FALSE}
+envPrevplot
+```
+
+Apply Prevalence Filter
+```{r}
+prevalenceThreshold = 0.05 * nsamples(ps)
+keepTaxa = rownames(prevdf)[(prevdf$Prevalence >= prevalenceThreshold)]
+ps2 = prune_taxa(keepTaxa, ps)
+```
+
+### Taxonomic Filtering
+Remove SVs without Phylum classification. 
+```{r}
+keeps<- c("D_1__Archaeplastida", "D_1__Cryptophyceae", "D_1__Haptophyta", "D_1__Incertae Sedis", "D_1__Opisthokonta", "D_1__Picozoa", "D_1__SAR")
+ps2 <- subset_taxa(ps2, D1 %in% keeps)
+```
+
+```{r}
+table(tax_table(ps2)[, "D3"], exclude = NULL)
+```
+
+
+
+### Transformation
+Transform count data to relative abundance (as %) to normalize for differences in library size.
+```{r}
+ps2ra<- transform_sample_counts(ps2, function(OTU) OTU/sum(OTU))
+```
+## Distance and Ordination 
+
+Determine the Bray-Curtis distances between samples and perform Principal Coordinate Analysis (PCoA). Plot the PCoA. 
+```{r}
+cbPalette <- c("#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+ordu = ordinate(ps2ra, "PCoA", "bray")
+p3<-plot_ordination(ps2ra, ordu, color="Location") + geom_point(size=3.5) +scale_color_manual(values=cbPalette) +theme_bw() + 
+  theme(text=element_text(size=16,  family="serif"))
+```
+```{r,echo=FALSE} 
+p3
+```
+
+
+
