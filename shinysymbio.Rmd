@@ -1,0 +1,130 @@
+---
+title: "REVIGO MDS of semantic similarity between nonredundant GO terms enriched in significantly differentially expressed genes"
+author: "Maggi Brisbin"
+date: "4/26/2019"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=8, fig.height=5)
+```
+
+```{r loadLibraries,echo=FALSE, message=FALSE, warning=FALSE}
+library("ggplot2") 
+library("stringi")
+library(tidyr)
+library( scales )
+library(ggrepel)
+library("shiny")
+library(plotly)
+```
+
+```{r revigo, echo=FALSE, message=FALSE}
+revigo.names <- c("term_ID","description","frequency_%","plot_X","plot_Y","plot_size","value","uniqueness","dispensability");
+revigo.data <- rbind(c("GO:0008152","metabolic process",75.387, 2.207, 2.672, 6.986, 1.0000,0.996,0.000),
+c("GO:0015979","photosynthesis", 0.183, 2.186, 0.238, 4.370, 1.0000,0.914,0.000),
+c("GO:0031144","proteasome localization", 0.004, 4.538, 2.063, 2.761, 0.0000,0.953,0.000),
+c("GO:0070647","protein modification by small protein conjugation or removal", 0.821,-6.758, 2.884, 5.023, 0.0000,0.806,0.000),
+c("GO:0098662","inorganic cation transmembrane transport", 1.858, 5.158, 0.434, 5.377, 1.0000,0.918,0.000),
+c("GO:0070085","glycosylation", 0.415, 2.758,-4.295, 4.726, 0.0000,0.873,0.014),
+c("GO:0009058","biosynthetic process",31.611, 3.874,-1.933, 6.608, 0.0000,0.952,0.023),
+c("GO:0061024","membrane organization", 0.759, 3.002, 4.620, 4.989, 0.0000,0.910,0.034),
+c("GO:0071554","cell wall organization or biogenesis", 0.950, 2.247, 5.453, 5.086, 0.0000,0.940,0.034),
+c("GO:0070887","cellular response to chemical stimulus", 1.007, 0.661, 6.666, 5.111, 0.0000,0.885,0.035),
+c("GO:0042737","drug catabolic process", 0.001, 2.841,-6.960, 2.286, 0.0000,0.865,0.037),
+c("GO:1901071","glucosamine-containing compound metabolic process", 0.132,-2.149,-7.623, 4.229, 0.0000,0.772,0.039),
+c("GO:0019684","photosynthesis, light reaction", 0.069, 5.112,-2.446, 3.947, 1.0000,0.890,0.044),
+c("GO:0009123","nucleoside monophosphate metabolic process", 2.367,-2.437,-2.417, 5.482, 1.0000,0.608,0.059),
+c("GO:1901135","carbohydrate derivative metabolic process", 6.319, 0.838, 3.692, 5.909, 0.0000,0.907,0.059),
+c("GO:0006091","generation of precursor metabolites and energy", 1.940, 0.022, 5.390, 5.396, 1.0000,0.896,0.077),
+c("GO:0006012","galactose metabolic process", 0.109, 2.601,-5.433, 4.145, 0.0000,0.818,0.128),
+c("GO:0044036","cell wall macromolecule metabolic process", 0.709,-5.790, 4.636, 4.959, 0.0000,0.847,0.144),
+c("GO:0006260","DNA replication", 1.577,-7.115,-0.694, 5.306, 0.0000,0.722,0.157),
+c("GO:0006417","regulation of translation", 0.692,-5.292,-0.131, 4.948, 1.0000,0.569,0.162),
+c("GO:0010467","gene expression",19.671,-7.594, 2.808, 6.402, 1.0000,0.844,0.170),
+c("GO:0032012","regulation of ARF protein signal transduction", 0.040,-1.526, 6.570, 3.705, 1.0000,0.831,0.212),
+c("GO:0043244","regulation of protein complex disassembly", 0.160,-1.214, 4.660, 4.311, 1.0000,0.766,0.237),
+c("GO:0034641","cellular nitrogen compound metabolic process",34.137,-5.003, 0.582, 6.641, 1.0000,0.776,0.241),
+c("GO:0015748","organophosphate ester transport", 0.144, 5.202, 0.880, 4.268, 1.0000,0.890,0.272),
+c("GO:1901576","organic substance biosynthetic process",30.365,-7.824,-3.302, 6.591, 0.0000,0.765,0.295),
+c("GO:0043603","cellular amide metabolic process", 6.879,-5.043, 1.478, 5.946, 1.0000,0.797,0.310),
+c("GO:0046466","membrane lipid catabolic process", 0.019, 1.268,-6.823, 3.393, 0.0000,0.706,0.337),
+c("GO:0006259","DNA metabolic process", 5.607,-6.659, 1.248, 5.857, 0.0000,0.739,0.344),
+c("GO:0072330","monocarboxylic acid biosynthetic process", 0.940,-5.815,-4.288, 5.081, 1.0000,0.699,0.381),
+c("GO:0006862","nucleotide transport", 0.028, 5.433,-0.082, 3.559, 1.0000,0.900,0.388),
+c("GO:0010604","positive regulation of macromolecule metabolic process", 0.988,-3.702, 5.427, 5.103, 1.0000,0.708,0.395),
+c("GO:0006452","translational frameshifting", 0.017,-6.193,-0.522, 3.330, 1.0000,0.720,0.396),
+c("GO:0006026","aminoglycan catabolic process", 0.166,-2.611,-5.685, 4.329, 0.0000,0.636,0.397),
+c("GO:0010608","posttranscriptional regulation of gene expression", 0.719,-4.053, 5.021, 4.965, 1.0000,0.797,0.400),
+c("GO:0007062","sister chromatid cohesion", 0.098, 4.421,-3.565, 4.100, 0.0000,0.835,0.413),
+c("GO:0006040","amino sugar metabolic process", 0.244,-2.060,-7.740, 4.496, 0.0000,0.788,0.417),
+c("GO:0006869","lipid transport", 0.270, 4.859, 1.250, 4.539, 0.0000,0.877,0.426),
+c("GO:0006486","protein glycosylation", 0.317,-3.939,-4.002, 4.610, 0.0000,0.599,0.448),
+c("GO:0044271","cellular nitrogen compound biosynthetic process",22.502,-6.815,-2.601, 6.460, 1.0000,0.704,0.453),
+c("GO:0009100","glycoprotein metabolic process", 0.356,-3.261,-6.519, 4.659, 0.0000,0.731,0.454),
+c("GO:1901566","organonitrogen compound biosynthetic process",14.064,-6.298,-2.865, 6.256, 1.0000,0.677,0.456),
+c("GO:0016567","protein ubiquitination", 0.523,-6.731, 3.209, 4.827, 0.0000,0.806,0.470),
+c("GO:0006022","aminoglycan metabolic process", 0.883,-3.793,-5.167, 5.054, 0.0000,0.671,0.499),
+c("GO:0034248","regulation of cellular amide metabolic process", 0.700,-3.758, 3.699, 4.954, 1.0000,0.697,0.502),
+c("GO:1901136","carbohydrate derivative catabolic process", 0.423,-1.128,-6.990, 4.735, 0.0000,0.738,0.508),
+c("GO:0006414","translational elongation", 0.777,-5.722,-1.036, 4.999, 1.0000,0.638,0.550),
+c("GO:0034645","cellular macromolecule biosynthetic process",19.291,-6.787,-1.358, 6.394, 0.0000,0.693,0.555),
+c("GO:0006515","misfolded or incompletely synthesized protein catabolic process", 0.056,-1.385,-1.065, 3.860, 0.0000,0.769,0.556),
+c("GO:0009059","macromolecule biosynthetic process",19.548,-7.438,-2.056, 6.399, 0.0000,0.748,0.558),
+c("GO:0015986","ATP synthesis coupled proton transport", 0.411,-2.348,-3.677, 4.722, 0.0000,0.440,0.567),
+c("GO:0010876","lipid localization", 0.296, 4.808, 1.843, 4.579, 0.0000,0.944,0.578),
+c("GO:0006261","DNA-dependent DNA replication", 0.576,-7.614,-0.572, 4.869, 0.0000,0.743,0.584),
+c("GO:0019374","galactolipid metabolic process", 0.003,-1.061,-7.327, 2.617, 0.0000,0.708,0.587),
+c("GO:0022900","electron transport chain", 0.564, 3.696,-4.424, 4.860, 1.0000,0.801,0.621),
+c("GO:1901137","carbohydrate derivative biosynthetic process", 3.651,-4.627,-5.669, 5.671, 0.0000,0.665,0.644),
+c("GO:0006687","glycosphingolipid metabolic process", 0.018,-2.106,-6.329, 3.375, 0.0000,0.636,0.647),
+c("GO:0044249","cellular biosynthetic process",30.048,-7.622,-2.913, 6.586, 0.0000,0.748,0.658),
+c("GO:0046390","ribose phosphate biosynthetic process", 1.778,-4.311,-5.487, 5.358, 1.0000,0.553,0.674),
+c("GO:0006412","translation", 5.686,-5.626,-1.014, 5.863, 1.0000,0.563,0.696));
+
+one.data <- data.frame(revigo.data);
+names(one.data) <- revigo.names;
+one.data <- one.data [(one.data$plot_X != "null" & one.data$plot_Y != "null"), ];
+one.data$plot_X <- as.numeric( as.character(one.data$plot_X) );
+one.data$plot_Y <- as.numeric( as.character(one.data$plot_Y) );
+one.data$plot_size <- as.numeric( as.character(one.data$plot_size) );
+one.data$frequency <- as.numeric( as.character(one.data$frequency) );
+one.data$uniqueness <- as.numeric( as.character(one.data$uniqueness) );
+one.data$dispensability <- as.numeric( as.character(one.data$dispensability) );
+ex <- one.data [ c(2,5,9,13,18,19,20,21,24,29,35,36,40,42,46,50, 52,53), ]; 
+
+one.data$value <- gsub('0', 'Down', one.data$value)
+one.data$value <- gsub('1', 'Up', one.data$value)
+
+p1 <- ggplot( data = one.data ) +
+  geom_point( aes( plot_X, plot_Y, colour = value), alpha = I(0.6), size =7) +
+  scale_colour_manual(values =c("#3B9AB2", "red"), labels= c("Down", "Up")) +
+  geom_point( aes(plot_X, plot_Y), shape = 21, fill = "transparent", colour = I (alpha ("black", 0.6) ), size = 7) +   scale_size_area() + scale_size( range=c(5, 30)) + theme_bw() +
+  geom_label_repel(data = ex, aes(plot_X, plot_Y, label = description), colour = I(alpha("black", 0.85)), size = 4, nudge_x = 0 , point.padding = 0.2, label.padding = 0.1)+ labs (y = "semantic space y", x = "semantic space x") +
+  theme(legend.key = element_blank()) + theme(text = element_text(size=16)) + theme(legend.title=element_blank())
+```
+
+```{r, message= FALSE, echo=FALSE}
+key = one.data$description
+
+p1 <- ggplot( data = one.data, aes(key= key, x= plot_X, y= plot_Y, color = value) ) +
+  geom_point(alpha = I(0.6), size =7) +
+  scale_colour_manual(values =c("#3B9AB2", "red"), labels= c("Down", "Up")) +
+  geom_point( aes(plot_X, plot_Y), shape = 21, fill = "transparent", colour = I (alpha ("black", 0.6) ), size = 7) +   scale_size_area() + scale_size( range=c(5, 30)) + theme_bw() + labs (y = "Axis 2", x = "Axis 1") +
+  theme(legend.key = element_blank()) + theme(text = element_text(size=16)) + theme(legend.title=element_blank())
+pp=plotly_build(p1)  
+```
+
+```{r, echo=FALSE}
+ui <- fluidPage(
+  plotlyOutput("plot"))
+server <- function(input, output) {
+  output$plot <-renderPlotly({
+  style( pp, text= key, hoverinfo = "text")
+})
+}
+
+shinyApp(ui, server)
+```
+
